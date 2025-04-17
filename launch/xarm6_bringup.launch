@@ -1,0 +1,36 @@
+<launch>
+    <!-- ################### Arguments ###################-->
+    <arg name="add_gripper" default="true" />
+    <!-- pipeline is stomp or ompl -->
+    <arg name="pipeline" default="ompl" />
+    <!-- use_pathseed -->
+    <arg name="use_pathseed" default="true" />
+
+    <!-- ################### Parameters ###################-->
+    <!-- use_pathseed -->
+    <param name="use_pathseed" value="$(arg use_pathseed)" />
+    <!-- csv files -->
+    <param name="pipeline" value="$(arg pipeline)" />
+    <param name="octomap_frame" value="map" />
+    <param name="octomap_resolution" value="0.02" />
+    <param name="use_octomap_monitor" value="true" />
+
+    <!-- ################### Launch ###################-->
+    <include file="$(find xarm_gazebo)/launch/xarm6_beside_table.launch">
+        <arg name="add_gripper" value="$(arg add_gripper)" />
+    </include>
+
+    <include file="$(find xarm6_gripper_moveit_config)/launch/xarm6_gripper_moveit_gazebo.launch" />
+
+    <!-- Planning Functionality -->
+    <include ns="move_group" file="$(find xarm6_gripper_moveit_config)/launch/planning_pipeline.launch.xml">
+        <arg name="pipeline" value="$(arg pipeline)" />
+    </include>
+
+    <!-- PathSeed publisher -->
+    <!-- TODO: launchファイルに記述するとうまく動作しないため、コメントアウトして別ターミナルで実行する -->
+    <!-- <node name="pathseed_pub" pkg="train_data_smoothing" type="train_path_pub.py" output="screen"/> -->
+
+    <!-- rviz -->
+    <node name="xarm6_octomap_avoidance" pkg="rviz" type="rviz" args="-d $(find xarm6_octomap_avoidance)/rviz/xarm6_octomap_avoidance.rviz" />
+</launch>
