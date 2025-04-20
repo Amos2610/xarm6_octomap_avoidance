@@ -7,7 +7,7 @@
 
 ## ✅ 構成要素
 
-- xArm6ロボット（`train_data_smoothing`など外部パッケージで起動）
+- xArm6ロボット
 - Intel RealSense D435i
 - octomap_server（PointCloud → Occupancy Grid）
 - MoveIt!（軌道生成）
