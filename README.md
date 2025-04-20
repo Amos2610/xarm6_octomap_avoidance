@@ -50,7 +50,33 @@
 ```bash
 git clone https://github.com/Amos2610/xarm6_octomap_avoidance.git
 ```
-
+```bash
+# apt install
+sudo apt update && sudo apt install -y \
+  ros-noetic-xacro \
+  ros-noetic-joint-state-publisher \
+  ros-noetic-joint-state-publisher-gui \
+  ros-noetic-robot-state-publisher \
+  ros-noetic-moveit \
+  ros-noetic-moveit-commander \
+  ros-noetic-moveit-ros-planning-interface \
+  ros-noetic-moveit-ros-perception \
+  ros-noetic-moveit-ros-visualization \
+  ros-noetic-moveit-planners-ompl \
+  ros-noetic-octomap-server \
+  ros-noetic-octomap-msgs \
+  ros-noetic-pcl-ros \
+  ros-noetic-tf \
+  ros-noetic-tf2-ros \
+  ros-noetic-rviz \
+  ros-noetic-ros-control \
+  ros-noetic-controller-manager \
+  ros-noetic-realsense2-camera  # ※通常はsource buildするがAPT提供時用に記載
+```
+```bash
+# pip install
+pip install -r requirements.txt
+```
 
 ## 🚀 実行手順
 
