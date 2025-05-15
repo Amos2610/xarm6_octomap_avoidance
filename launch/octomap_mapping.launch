@@ -7,7 +7,7 @@
   www.ros.org/wiki/octomap_server for details  
 -->
 <launch>
-	<arg name="cloud_in" default="/camera/depth/color/points" doc="Input point cloud topic" />
+	<arg name="pointcloud_topic" default="/camera/depth/color/points" doc="Input point cloud topic" />
 	<arg name="frame_id" default="map" doc="Frame ID for the map" />
 	<arg name="resolution" default="0.025" doc="Resolution of the octomap" />
 	<arg name="max_range" default="5.0" doc="Maximum range for the sensor model" />
@@ -22,7 +22,7 @@
 		<param name="sensor_model/max_range" value="$(arg max_range)" />
 		
 		<!-- data source to integrate (PointCloud2) -->
-		<remap from="cloud_in" to="/camera/depth/color/points" />
+		<remap from="cloud_in" to="$(arg pointcloud_topic)" />
 	
 	</node>
 </launch>
