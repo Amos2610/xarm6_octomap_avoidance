@@ -27,10 +27,4 @@
         <arg name="pipeline" value="$(arg pipeline)" />
     </include>
 
-    <!-- PathSeed publisher -->
-    <!-- TODO: launchファイルに記述するとうまく動作しないため、コメントアウトして別ターミナルで実行する -->
-    <!-- <node name="pathseed_pub" pkg="train_data_smoothing" type="train_path_pub.py" output="screen"/> -->
-
-    <!-- rviz -->
-    <node name="xarm6_octomap_avoidance" pkg="rviz" type="rviz" args="-d $(find xarm6_octomap_avoidance)/rviz/xarm6_octomap_avoidance.rviz" />
 </launch>

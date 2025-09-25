@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="xarm6_octomap_avoidance" type="publish_octomap_to_moveit.py" name="push_static" output="screen">
+    <param name="source_topic" value="/octomap_static/octomap_full"/>
+    <param name="scene_topic"  value="/planning_scene"/>
+  </node>
+</launch>

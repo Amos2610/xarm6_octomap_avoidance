@@ -7,11 +7,15 @@ from std_msgs.msg import Header
 class OctomapToMoveIt:
     def __init__(self):
         rospy.init_node('octomap_to_moveit', anonymous=True)
-        self.pub = rospy.Publisher('/planning_scene', PlanningScene, queue_size=10)
-        rospy.Subscriber('/octomap_full', Octomap, self.octomap_callback)
+        # Get parameters
+        self.source_topic = rospy.get_param('~source_topic', '/octomap_full')
+        self.scene_topic  = rospy.get_param('~scene_topic',  '/planning_scene')
+
+        self.pub = rospy.Publisher(self.scene_topic, PlanningScene, queue_size=10)
+        rospy.Subscriber(self.source_topic, Octomap, self.octomap_callback)
         rospy.loginfo("OctomapToMoveIt node initialized")
 
-    def octomap_to_ocotomap_with_pose(self, octomap):
+    def octomap_to_octomap_with_pose(self, octomap):
         octomap_with_pose = OctomapWithPose()
         octomap_with_pose.header = Header()
         octomap_with_pose.header.frame_id = octomap.header.frame_id
@@ -22,20 +26,19 @@ class OctomapToMoveIt:
     def octomap_callback(self, msg):
         rospy.loginfo("Received octomap message")
         # Convert the Octomap message to OctomapWithPose
-        octomap_with_pose = self.octomap_to_ocotomap_with_pose(msg)
-        msg = octomap_with_pose
+        owp = self.octomap_to_octomap_with_pose(msg)
         
         ps = PlanningScene()
         ps.is_diff = True
-        ps.world.octomap.header.frame_id = msg.header.frame_id
+        ps.world.octomap.header.frame_id = owp.header.frame_id
         ps.world.octomap.header.stamp = rospy.Time.now()
-        ps.world.octomap.origin = msg.origin
-        ps.world.octomap.octomap.header.frame_id = msg.header.frame_id
+        ps.world.octomap.origin = owp.origin
+        ps.world.octomap.octomap.header.frame_id = owp.header.frame_id
         ps.world.octomap.octomap.header.stamp = rospy.Time.now()
-        ps.world.octomap.octomap.binary = msg.octomap.binary
-        ps.world.octomap.octomap.id = msg.octomap.id
-        ps.world.octomap.octomap.resolution = msg.octomap.resolution
-        ps.world.octomap.octomap.data = msg.octomap.data
+        ps.world.octomap.octomap.binary = owp.octomap.binary
+        ps.world.octomap.octomap.id = owp.octomap.id
+        ps.world.octomap.octomap.resolution = owp.octomap.resolution
+        ps.world.octomap.octomap.data = owp.octomap.data
 
         self.pub.publish(ps)
         rospy.loginfo("Published octomap to MoveIt PlanningScene")

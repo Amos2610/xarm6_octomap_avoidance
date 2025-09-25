@@ -1,5 +1,15 @@
 <launch>
-<!-- TF: map → camera_link -->
+  <!-- Arg for Octomap Server -->
+  <arg name="cloud_in" default="/camera/depth/color/points" doc="Input point cloud topic" />
+  <arg name="frame_id" default="map" doc="Frame ID for the map" />
+  <arg name="resolution" default="0.025" doc="Resolution of the octomap" />
+  <arg name="max_range" default="1.5" doc="Maximum range for the sensor model" />
+  <!-- Arg for Octomap2MoveIt -->
+  <arg name="source_topic" default="/octomap_static/server_static" doc="Source octomap topic" />
+  <arg name="scene_topic" default="/planning_scene" doc="Planning scene topic" />
+
+  <param name="/use_sim_time" value="false"/>
+  <!-- TF: map → camera_link -->
   <!-- <node pkg="tf" type="static_transform_publisher" name="tf_map_camera" args="0 0 0 0 0 0 map camera_link 100" /> -->
   <node pkg="tf" type="static_transform_publisher" name="tf_map_camera"
       args="-0.1 -0.3 0.1 0 1 1 1 map camera_color_optical_frame 100" />
@@ -14,13 +24,20 @@
   </include>
 
   <!-- Octomap Server -->
-  <include file="$(find xarm6_octomap_avoidance)/launch/octomap_mapping.launch">
-    <arg name="cloud_in" value="/camera/depth/color/points" />
-    <arg name="frame_id" value="map" />
-    <arg name="resolution" value="0.015" />
-    <arg name="max_range" value="1.5" />
+  <include file="$(find xarm6_octomap_avoidance)/launch/layers_octomap.launch">
+    <remap from="cloud_in" to="$(arg cloud_in)"/>
+    <param name="frame_id" value="$(arg frame_id)" />
+    <param name="resolution" value="$(arg resolution)" />
+    <param name="max_range" value="$(arg max_range)" />
   </include>
 
   <!-- Octomap → MoveIt publisher -->
-  <!-- <node pkg="xarm6_octomap_avoidance" type="publish_octomap_to_moveit.py" name="octomap_to_moveit" output="screen" /> -->
+  <node pkg="xarm6_octomap_avoidance" type="publish_octomap_to_moveit.py" name="push_static" output="screen">
+    <param name="source_topic" value="$(arg source_topic)"/>
+    <param name="scene_topic" value="$(arg scene_topic)"/>
+  </node>
+
+  <!-- rviz -->
+  <!-- <node name="xarm6_octomap_avoidance" pkg="rviz" type="rviz" args="-d $(find xarm6_octomap_avoidance)/rviz/xarm6_octomap_avoidance.rviz" /> -->
+
 </launch>
