@@ -15,6 +15,15 @@ class OctomapToMoveIt:
         rospy.Subscriber(self.source_topic, Octomap, self.octomap_callback)
         rospy.loginfo("OctomapToMoveIt node initialized")
 
+        rospy.on_shutdown(self.clear_octomap)
+
+    def clear_octomap(self):
+        rospy.loginfo("Clearing octomap from MoveIt PlanningScene")
+        ps = PlanningScene()
+        ps.is_diff = True
+        ps.world.octomap.octomap = Octomap()  # 空のOctomapをセット
+        self.pub.publish(ps)
+
     def octomap_to_octomap_with_pose(self, octomap):
         octomap_with_pose = OctomapWithPose()
         octomap_with_pose.header = Header()

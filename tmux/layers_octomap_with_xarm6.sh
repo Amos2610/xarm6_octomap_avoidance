@@ -2,9 +2,13 @@
 set -e
 
 SESSION="layers_octomap_with_xarm6"
-WORKDIR="$HOME/vision_ws"
-RVIZ_CFG="$WORKDIR/src/xarm6_octomap_avoidance/rviz/xarm6_octomap_avoidance.rviz"
-
+if [ "$HOME" = "/home/calpis-sour" ]; then
+  WORKDIR="$HOME/vision_ws"
+  RVIZ_CFG="$WORKDIR/src/xarm6_octomap_avoidance/rviz/xarm6_octomap_avoidance.rviz"
+else
+  WORKDIR="$HOME/nishidalab_ws"
+  RVIZ_CFG="$WORKDIR/src/5_skills/xarm6_octomap_avoidance/rviz/xarm6_octomap_avoidance.rviz"
+fi
 # 既存セッションがあればアタッチ
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "[tmux] attach to existing session: $SESSION"
