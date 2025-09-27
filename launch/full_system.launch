@@ -8,6 +8,8 @@
   <arg name="source_topic" default="/octomap_static/server_static" doc="Source octomap topic" />
   <arg name="scene_topic" default="/planning_scene" doc="Planning scene topic" />
 
+  <rosparam command="load" file="$(find xarm6_moveit_config)/config/sensors_3d.yaml" ns="move_group"/>
+
   <param name="/use_sim_time" value="false"/>
   <!-- TF: map → camera_link -->
   <!-- <node pkg="tf" type="static_transform_publisher" name="tf_map_camera" args="0 0 0 0 0 0 map camera_link 100" /> -->

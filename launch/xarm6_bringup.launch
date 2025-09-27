@@ -17,6 +17,7 @@
     <param name="octomap_frame" value="map" />
     <param name="octomap_resolution" value="0.02" />
     <param name="use_octomap_monitor" value="true" />
+    <rosparam command="load" file="$(find xarm6_moveit_config)/config/sensors_3d.yaml" ns="move_group"/>
 
     <!-- ################### Launch ###################-->
     <group if="$(arg sim)">

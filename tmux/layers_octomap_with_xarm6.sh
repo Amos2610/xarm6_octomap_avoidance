@@ -17,14 +17,16 @@ fi
 
 # 新規セッション作成
 tmux new-session -d -s "$SESSION" -c "$WORKDIR"
-
-
     # ペイン1：bringup
     tmux send-keys -t $SESSION "cd $WORKDIR" C-m
     tmux send-keys -t $SESSION 'source devel/setup.bash' C-m
     tmux send-keys -t $SESSION 'sleep 2' C-m
     tmux send-keys -t $SESSION  C-l
-    tmux send-keys -t $SESSION 'roslaunch xarm6_octomap_avoidance xarm6_bringup.launch'
+    if [ "$HOME" = "/home/calpis-sour" ]; then
+      tmux send-keys -t $SESSION 'roslaunch xarm6_octomap_avoidance xarm6_bringup.launch sim:=true'
+    else
+      tmux send-keys -t $SESSION 'roslaunch xarm6_octomap_avoidance xarm6_bringup.launch'
+    fi
 
     # ペイン3: full_system
     # 垂直分割してペインを作成

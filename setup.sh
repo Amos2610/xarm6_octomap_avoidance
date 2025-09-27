@@ -25,6 +25,8 @@ sudo apt update && sudo apt install -y \
   ros-noetic-controller-manager \
   ros-noetic-realsense2-camera 
 
+sudo apt-get install ros-noetic-robot-self-filter
+
 echo "Building the workspace..."
 catkin build
 source devel/setup.bash
