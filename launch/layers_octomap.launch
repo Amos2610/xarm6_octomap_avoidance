@@ -8,14 +8,14 @@
   <arg name="static_max_range" default="5.0" doc="Static max sensor range [m]" />
   <arg name="static_min_range" default="2.0" doc="Static min sensor range [m]" />
 
-  <!-- Dynamic -->
-  <arg name="dynamic_res" default="0.05" doc="Dynamic map resolution [m]" />
-  <arg name="dynamic_max_range" default="2.0" doc="Dynamic max sensor range [m]" />
-  <arg name="dynamic_min_range" default="1.0" doc="Dynamic min sensor range [m]" />
+  <!-- semi_static -->
+  <arg name="semi_static_res" default="0.05" doc="semi_static map resolution [m]" />
+  <arg name="semi_static_max_range" default="2.0" doc="semi_static max sensor range [m]" />
+  <arg name="semi_static_min_range" default="1.0" doc="semi_static min sensor range [m]" />
 
-  <!-- Object -->
-  <arg name="object_res" default="0.02" doc="Object map resolution [m]" />
-  <arg name="object_max_range" default="1.0" doc="Object max sensor range [m]" />
+  <!-- Dynamic -->
+  <arg name="dynamic_res" default="0.02" doc="Dynamic map resolution [m]" />
+  <arg name="dynamic_max_range" default="1.0" doc="Dynamic max sensor range [m]" />
 
   <!-- Static（粗め）-->
   <group ns="octomap_static">
@@ -28,24 +28,25 @@
     </node>
   </group>
 
-  <!-- Dynamic（中程度）-->
-  <group ns="octomap_dynamic">
-    <node pkg="octomap_server" type="octomap_server_node" name="server_dynamic" output="screen">
-      <param name="resolution" value="$(arg dynamic_res)"/>
-      <param name="sensor_model/max_range" value="$(arg dynamic_max_range)"/>
-      <param name="sensor_model/min_range" value="$(arg dynamic_min_range)"/>
+  <!-- semi_static（中程度）-->
+  <group ns="octomap_semi_static">
+    <node pkg="octomap_server" type="octomap_server_node" name="server_semi_static" output="screen">
+      <param name="resolution" value="$(arg semi_static_res)"/>
+      <param name="sensor_model/max_range" value="$(arg semi_static_max_range)"/>
+      <param name="sensor_model/min_range" value="$(arg semi_static_min_range)"/>
       <remap from="cloud_in" to="$(arg cloud_topic)"/>
       <param name="frame_id" value="$(arg frame_id)"/>
     </node>
   </group>
 
-  <!-- Object（細かめ）-->
-  <group ns="octomap_object">
-    <node pkg="octomap_server" type="octomap_server_node" name="server_object" output="screen">
-      <param name="resolution" value="$(arg object_res)"/>
-      <param name="sensor_model/max_range" value="$(arg object_max_range)"/>
+  <!-- Dynamic（細かめ）-->
+  <group ns="octomap_dynamic">
+    <node pkg="octomap_server" type="octomap_server_node" name="server_dynamic" output="screen">
+      <param name="resolution" value="$(arg dynamic_res)"/>
+      <param name="sensor_model/max_range" value="$(arg dynamic_max_range)"/>
       <remap from="cloud_in" to="$(arg cloud_topic)"/>
       <param name="frame_id" value="$(arg frame_id)"/>
     </node>
   </group>
+
 </launch>
