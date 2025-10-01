@@ -1,12 +1,35 @@
 <launch>
-  <!-- Arg for Octomap Server -->
-  <arg name="cloud_in" default="/camera/depth/color/points" doc="Input point cloud topic" />
-  <arg name="frame_id" default="map" doc="Frame ID for the map" />
-  <arg name="resolution" default="0.025" doc="Resolution of the octomap" />
-  <arg name="max_range" default="1.5" doc="Maximum range for the sensor model" />
-  <!-- Arg for Octomap2MoveIt -->
-  <arg name="source_topic" default="/octomap_static/server_static" doc="Source octomap topic" />
-  <arg name="scene_topic" default="/planning_scene" doc="Planning scene topic" />
+  <!-- =========
+       Common Args (最低限ここだけ触ればOK)
+       ========= -->
+  <arg name="use_sim_time"         default="false"/>
+  <arg name="cloud_topic"          default="/camera/depth/color/points"/>
+  <arg name="frame_id"             default="map"/>
+
+  <!-- Realsense -->
+  <arg name="align_depth"          default="true"/>
+  <arg name="enable_pointcloud"    default="true"/>
+
+  <!-- MoveItへ反映（不要ならfalse） -->
+  <arg name="source_topic"         default="/octomap_dynamic/octomap_full"/>
+  <arg name="scene_topic"          default="/planning_scene"/>
+
+  <!-- =========
+       Layer Args（必要な時だけ上書き）
+       ========= -->
+  <!-- Static（粗め・広域）-->
+  <arg name="static_res"           default="0.15"/>
+  <arg name="static_max_range"     default="2.0"/>
+  <arg name="static_min_range"     default="1.0"/>
+
+  <!-- semi_static（中程度）-->
+  <arg name="semi_static_res"           default="0.07"/>
+  <arg name="semi_static_max_range"     default="1.0"/>
+  <arg name="semi_static_min_range"     default="0.4"/>
+
+  <!-- Dynamic（細かめ・近距離）-->
+  <arg name="dynamic_res"          default="0.02"/>
+  <arg name="dynamic_max_range"    default="1.0"/>
 
   <param name="/use_sim_time" value="false"/>
   <!-- TF: map → camera_link -->
@@ -30,19 +53,25 @@
 
   <!-- Octomap Server -->
   <include file="$(find xarm6_octomap_avoidance)/launch/layers_octomap.launch">
-    <remap from="cloud_in" to="$(arg cloud_in)"/>
-    <param name="frame_id" value="$(arg frame_id)" />
-    <param name="resolution" value="$(arg resolution)" />
-    <param name="max_range" value="$(arg max_range)" />
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+    <arg name="frame_id" value="$(arg frame_id)"/>
+    <arg name="static_res" value="$(arg static_res)"/>
+    <arg name="static_max_range" value="$(arg static_max_range)"/>
+    <arg name="static_min_range" value="$(arg static_min_range)"/>
+    <arg name="dynamic_res" value="$(arg dynamic_res)"/>
+    <arg name="dynamic_max_range" value="$(arg dynamic_max_range)"/>
+    <arg name="semi_static_res" value="$(arg semi_static_res)"/>
+    <arg name="semi_static_max_range" value="$(arg semi_static_max_range)"/>
+    <arg name="semi_static_min_range" value="$(arg semi_static_min_range)"/>
   </include>
 
   <!-- Octomap → MoveIt publisher -->
-  <!-- <node pkg="xarm6_octomap_avoidance" type="publish_octomap_to_moveit.py" name="push_static" output="screen">
+  <node pkg="xarm6_octomap_avoidance" type="publish_octomap_to_moveit.py" name="push_dynamic" output="screen" >
     <param name="source_topic" value="$(arg source_topic)"/>
     <param name="scene_topic" value="$(arg scene_topic)"/>
-  </node> -->
+  </node>
 
   <!-- rviz -->
-  <!-- <node name="xarm6_octomap_avoidance" pkg="rviz" type="rviz" args="-d $(find xarm6_octomap_avoidance)/rviz/xarm6_octomap_avoidance.rviz" /> -->
+  <node name="xarm6_octomap_avoidance" pkg="rviz" type="rviz" args="-d $(find xarm6_octomap_avoidance)/rviz/xarm6_octomap_avoidance.rviz" />
 
 </launch>
