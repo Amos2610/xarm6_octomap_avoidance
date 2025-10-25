@@ -4,6 +4,7 @@ import rospy
 import cv2
 import numpy as np
 import open3d as o3d
+import threading
 from cv_bridge import CvBridge
 from ultralytics import YOLO
 
@@ -11,6 +12,8 @@ from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Pose, PointStamped, Point, Vector3
 from shape_msgs.msg import SolidPrimitive, Mesh, MeshTriangle
 from moveit_msgs.msg import PlanningScene, CollisionObject, AttachedCollisionObject
+from std_srvs.srv import Trigger, TriggerResponse
+from std_msgs.msg import String
 
 import tf2_ros
 import tf2_geometry_msgs
@@ -80,10 +83,16 @@ class YoloToCollisionObject:
         self.tfbuf = tf2_ros.Buffer()
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
 
+        self._buf_lock = threading.Lock()
+
         # ---- pubs/subs ----
         self.sub_color = rospy.Subscriber(self.color_topic, Image, self.cb_color, queue_size=1, buff_size=2**24)
         self.sub_depth = rospy.Subscriber(self.depth_topic, Image, self.cb_depth, queue_size=1, buff_size=2**24)
         self.sub_info  = rospy.Subscriber(self.info_topic, CameraInfo, self.cb_info, queue_size=1)
+        self.srv_apply = rospy.Service("~apply_planning_scene", Trigger, self._srv_apply_planning_scene_cb)
+        self.srv_clear_planning_scene = rospy.Service("~clear_planning_scene", Trigger, self._srv_clear_planning_scene_cb)
+
+        self.sub_attach_req = rospy.Subscriber("~request_attach", String, self._cb_request_attach, queue_size=10)
 
         self.pub_anno  = rospy.Publisher("/yolo/annotated", Image, queue_size=1)
         self.pub_scene = rospy.Publisher(self.scene_topic, PlanningScene, queue_size=10)
@@ -98,8 +107,24 @@ class YoloToCollisionObject:
         self.min_points_for_mesh = int(rospy.get_param("~min_points_for_mesh", 80)) # メッシュ化最低点数
         self.decimate_ratio = float(rospy.get_param("~decimate_ratio", 1.0))  # 1.0=無効, 0.5=半分
 
+        self.apply_planning_scene_hz = float(rospy.get_param("~apply_planning_scene_hz", 30.0))  # 0=無効, >0=定期適用
+
         # 連打抑止：直近にアタッチ済みのID
         self._attached_ids = set()
+        self._world_ids = set()
+
+        self._pending_world_cos = []    # List[CollisionObject]（REMOVE/ADD 混在）
+        self._pending_attach_acos = []  # List[AttachedCollisionObject]
+        self._queued_attach_ids = set() # apply前の重複登録防止
+
+        self._latest_world_co = {}   # id -> CollisionObject（ADD側の最新版を保持）
+        self._latest_aco      = {}   # id -> AttachedCollisionObject（最新版候補）
+        self._attach_requests = set()  # 把持を確定させたい id セット
+
+        # ---- timer----
+        if self.apply_planning_scene_hz > 0.0:
+            period = 1.0 / self.apply_planning_scene_hz
+            self._apply_timer = rospy.Timer(rospy.Duration.from_sec(period), self._auto_apply_timer_cb)
 
         rospy.loginfo("YoloToCollisionObject started. "
                       f"color={self.color_topic}, depth={self.depth_topic}, info={self.info_topic}, "
@@ -117,6 +142,7 @@ class YoloToCollisionObject:
         self.depth_img = (img.astype(np.float32) / 1000.0) if img.dtype == np.uint16 else img.astype(np.float32)
 
     def cb_color(self, msg: Image):
+        self.msg = msg
         if self.K is None or self.depth_img is None:
             return  # 未同期
 
@@ -125,7 +151,7 @@ class YoloToCollisionObject:
             rospy.logdebug("TF not ready %s -> %s", self.camera_frame, self.target_frame)
             return
 
-        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        frame = self.bridge.imgmsg_to_cv2(self.msg, desired_encoding="bgr8")
         results = self.model.predict(source=frame, imgsz=IMG_SIZE, conf=CONF_THRES, device=DEVICE, verbose=False)
         r = results[0]
 
@@ -137,7 +163,7 @@ class YoloToCollisionObject:
         if r.boxes is None or len(r.boxes) == 0:
             # 可視化だけ流す
             out = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
-            out.header = msg.header
+            out.header = self.msg.header
             self.pub_anno.publish(out)
             return
 
@@ -276,8 +302,8 @@ class YoloToCollisionObject:
 
                     if self.attach_on_detect and (obj_id not in self._attached_ids):
                         aco = self._make_attached_from_co(co_attach, link_name=self.attach_link, touch_links=self.touch_links)
+                        self._latest_aco[obj_id] = aco
                         acoes_attach.append(aco)
-                        self._attached_ids.add(obj_id)
                         det_attached += 1
                 except Exception:
                     rospy.logwarn("lookup_transform camera->attach_link failed. Skipping ACO.")
@@ -297,18 +323,18 @@ class YoloToCollisionObject:
             det_aabb += 1
             self.try_clear_bbx(aabb)
             co = self._make_co_from_aabb(aabb, obj_id=obj_id, frame_id=self.target_frame)
+            self._latest_world_co[obj_id] = co
 
             if self.publish_world_co:
                 cos_world_add.extend(self._replace_world_co(co))
             if self.attach_on_detect and (obj_id not in self._attached_ids):
                 aco = self._make_attached_from_co(co, link_name=self.attach_link, touch_links=self.touch_links)
                 acoes_attach.append(aco)
-                self._attached_ids.add(obj_id)
                 det_attached += 1
 
         # 画像配信
         out = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
-        out.header = msg.header
+        out.header = self.msg.header
         self.pub_anno.publish(out)
 
         #セグオーバーレイ配信
@@ -318,32 +344,143 @@ class YoloToCollisionObject:
             if np.any(nz):
                 seg_overlay[nz] = (0.4 * seg_overlay[nz] + 0.6 * seg_canvas[nz]).astype(np.uint8)
             out_seg = self.bridge.cv2_to_imgmsg(seg_overlay, encoding="bgr8")
-            out_seg.header = msg.header
+            out_seg.header = self.msg.header
             self.pub_seg.publish(out_seg)
 
-        # PlanningSceneへ（diff）
+        with self._buf_lock:
+            if cos_world_add:
+                self._pending_world_cos.extend(cos_world_add)
+            if acoes_attach:
+                for aco in acoes_attach:
+                    if aco.object.id in self._queued_attach_ids:
+                        continue
+                    self._pending_attach_acos.append(aco)
+                    self._queued_attach_ids.add(aco.object.id)
+
         if cos_world_add or acoes_attach:
+            rospy.loginfo("Queued for apply_planning_scene: world_co=%d, attached=%d, kept=%d, aabb=%d",
+                          len(cos_world_add), len(acoes_attach), det_kept, det_aabb)
+
+    def _srv_apply_planning_scene_cb(self, req):
+        with self._buf_lock:
+            if not (self._pending_world_cos or self._pending_attach_acos or self._attach_requests):
+                return TriggerResponse(success=True, message="nothing to apply")
+
             ps = PlanningScene()
             ps.is_diff = True
-            ps.robot_state.is_diff = True  # 重要
+            ps.robot_state.is_diff = True
 
-            if cos_world_add:
-                ps.world.collision_objects = cos_world_add
+            # まず通常のキュー（World/Attach）を反映
+            if self._pending_world_cos:
+                ps.world.collision_objects.extend(self._pending_world_cos)
 
-            if acoes_attach:
-                # アタッチ時は、同IDのWorld COを念の為REMOVEして競合回避
-                for aco in acoes_attach:
+            if self._pending_attach_acos:
+                for aco in self._pending_attach_acos:
                     rm = CollisionObject()
                     rm.header.frame_id = aco.object.header.frame_id
                     rm.id = aco.object.id
                     rm.operation = CollisionObject.REMOVE
                     ps.world.collision_objects.append(rm)
+                ps.robot_state.attached_collision_objects = self._pending_attach_acos
 
-                ps.robot_state.attached_collision_objects = acoes_attach
+            # ★把持リクエストIDの処理：World→Attached へ切替
+            promoted = 0
+            for gid in list(self._attach_requests):
+                aco = self._latest_aco.get(gid, None)
+                if aco is None:
+                    continue  # 直近検出が無く候補未生成
+                # World側を除去（戻り CO も含めて消す）
+                rm = CollisionObject()
+                rm.header.frame_id = self.target_frame
+                rm.id = gid
+                rm.operation = CollisionObject.REMOVE
+                ps.world.collision_objects.append(rm)
+                # ACOを追加
+                ps.robot_state.attached_collision_objects.append(aco)
+                promoted += 1
+                # 内部状態更新
+                self._attached_ids.add(gid)
+                self._world_ids.discard(gid)
+                # ACOに昇格したので World最新版は任意で残さない
+                self._latest_world_co.pop(gid, None)
 
+            # publish
             self.pub_scene.publish(ps)
-            rospy.loginfo("PS diff published: world_co=%d, attached=%d, kept=%d, aabb=%d",
-                          len(cos_world_add), len(acoes_attach), det_kept, det_aabb)
+
+            n_world = len(self._pending_world_cos)
+            n_attach = len(self._pending_attach_acos) + promoted
+
+            # バッファクリア
+            self._pending_world_cos = []
+            self._pending_attach_acos = []
+            self._queued_attach_ids.clear()
+            self._attach_requests.clear()
+
+            msg = f"applied: world_co={n_world}, attached={n_attach}, promoted={promoted}"
+            rospy.loginfo(msg)
+            return TriggerResponse(success=True, message=msg)
+
+    
+    def _srv_clear_planning_scene_cb(self, req):
+        """
+        PlanningScene から本ノードが管理している全ての CO/ACO を削除する
+        """
+        with self._buf_lock:
+            ps = PlanningScene()
+            ps.is_diff = True
+            ps.robot_state.is_diff = True
+
+            # World CO: 既知のIDをすべて REMOVE
+            for cid in list(self._world_ids):
+                co = CollisionObject()
+                co.header.frame_id = self.target_frame  # 追加時と同じ frame_id を推奨
+                co.id = cid
+                co.operation = CollisionObject.REMOVE
+                ps.world.collision_objects.append(co)
+
+            # Attached CO: 既知のIDをすべて REMOVE
+            for aid in list(self._attached_ids):
+                aco = AttachedCollisionObject()
+                aco.object.id = aid
+                aco.object.operation = CollisionObject.REMOVE
+                # aco.link_name は省略可（idで十分に解決されます）
+                ps.robot_state.attached_collision_objects.append(aco)
+
+                # World側にも REMOVE を追加
+                co_rm = CollisionObject()
+                co_rm.header.frame_id = self.target_frame
+                co_rm.id = aid
+                co_rm.operation = CollisionObject.REMOVE
+                ps.world.collision_objects.append(co_rm)
+
+            # publish
+            self.pub_scene.publish(ps)
+
+            # クリア
+            n_world = len(self._world_ids)
+            n_attach = len(self._attached_ids)
+            self._world_ids.clear()
+            self._attached_ids.clear()
+
+            # ついでにキューも空にしておくと一貫性が保てる
+            self._pending_world_cos = []
+            self._pending_attach_acos = []
+            self._queued_attach_ids.clear()
+
+            msg = f"cleared: world_co={n_world}, attached={n_attach}"
+            rospy.loginfo(msg)
+            return TriggerResponse(success=True, message=msg)
+
+    def _cb_request_attach(self, msg: String):
+        with self._buf_lock:
+            self._attach_requests.add(msg.data)
+
+    def _auto_apply_timer_cb(self, _evt):
+        # バッファに差分があれば適用（Triggerと同じ実体を使う）
+        with self._buf_lock:
+            if not (self._pending_world_cos or self._pending_attach_acos or self._attach_requests):
+                return
+        self._srv_apply_planning_scene_cb(None)
 
     # ---------- helpers ----------
     def _masked_depth_to_convex_mesh(self, depth_m, mask, K):
